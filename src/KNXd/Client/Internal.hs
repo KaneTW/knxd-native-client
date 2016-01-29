@@ -138,7 +138,6 @@ type family WirePacketArgs (d :: PacketDirection) (t :: PacketType) where
   WirePacketArgs 'ToServer 'OpenTBroadcast = HList '[Unused Word16, Bool]
   WirePacketArgs 'ToServer 'OpenTTpdu = HList '[IndividualAddress, Unused Bool]
   WirePacketArgs 'ToServer 'OpenGroupcon = HList '[Unused Word16, Bool]
-
   WirePacketArgs d t = PacketArgs d t
 
 -- |Used to convert to/from wire representation
@@ -205,7 +204,7 @@ instance (ConvertWire e, ConvertWire (HList l))
   putWire (HCons e l) = putWire e >> putWire l
   getWire = HCons <$> getWire <*> getWire
 
-instance Serialize (WireKnxPacket d) where
+instance SingI d => Serialize (WireKnxPacket d) where
   put (WireKnxPacket packet) = do
     putNested (putWord16be . fromIntegral) $ do
       putWire . fromPacketType . getPacketType $ packet
@@ -217,5 +216,5 @@ instance Serialize (WireKnxPacket d) where
     case toSing t of
       SomeSing (sb :: Sing (t :: PacketType)) -> do
         packet :: KnxPacket d t <- fromWire <$> getWire
-        undefined
+        undefined -- return $ WireKnxPacket packet
 
