@@ -7,6 +7,22 @@ import Data.Singletons.TH
 
 $(singletons [d|data PacketDirection = FromServer | ToServer deriving (Show, Eq, Typeable)|])
 
+data ConnectionState
+  = Fresh
+  | Broken
+  | Busmonitor
+  | BusmonitorTs
+  | Broadcast
+  | Group
+  | Individual
+  | Tpdu
+  | Connection
+  | GroupSocket
+  | ManagementConnection
+  | ConnectionlessManagementConnection
+  | Stateless
+  deriving (Show, Eq, Typeable)
+
 data PacketType
   = InvalidRequest
   | ConnectionInuse
@@ -174,4 +190,4 @@ toPacketType 117 = CacheReadNowait
 toPacketType 118 = CacheLastUpdates
 toPacketType _ = error "unknown packet type"
 
-$(genSingletons [''PacketType])
+$(genSingletons [''PacketType, ''ConnectionState])
