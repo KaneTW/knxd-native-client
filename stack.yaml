@@ -2,6 +2,5 @@ flags: {}
 extra-package-dbs: []
 packages:
 - '.'
-extra-deps:
-- megaparsec-4.2.0
-resolver: ghc-7.10.3
+extra-deps: []
+resolver: lts-5.0

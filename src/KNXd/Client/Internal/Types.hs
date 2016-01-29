@@ -1,66 +1,177 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
 module KNXd.Client.Internal.Types where
 
-import KNXd.Client.Internal.TH
+import Data.Word
+import Data.Typeable
+import Data.Singletons.TH
 
-[defineToEnum|
-#define EIB_INVALID_REQUEST             0x0000
-#define EIB_CONNECTION_INUSE            0x0001
-#define EIB_PROCESSING_ERROR            0x0002
-#define EIB_CLOSED                      0x0003
-#define EIB_RESET_CONNECTION            0x0004
+$(singletons [d|data PacketDirection = FromServer | ToServer deriving (Show, Eq, Typeable)|])
 
-#define EIB_OPEN_BUSMONITOR             0x0010
-#define EIB_OPEN_BUSMONITOR_TEXT        0x0011
-#define EIB_OPEN_VBUSMONITOR            0x0012
-#define EIB_OPEN_VBUSMONITOR_TEXT       0x0013
-#define EIB_BUSMONITOR_PACKET           0x0014
-#define EIB_BUSMONITOR_PACKET_TS        0x0015
-#define EIB_OPEN_BUSMONITOR_TS          0x0016
-#define EIB_OPEN_VBUSMONITOR_TS         0x0017
+data PacketType
+  = InvalidRequest
+  | ConnectionInuse
+  | ProcessingError
+  | Closed
+  | ResetConnection
+  | OpenBusmonitor
+  | OpenBusmonitorText
+  | OpenVbusmonitor
+  | OpenVbusmonitorText
+  | BusmonitorPacket
+  | BusmonitorPacketTs
+  | OpenBusmonitorTs
+  | OpenVbusmonitorTs
+  | OpenTConnection
+  | OpenTIndividual
+  | OpenTGroup
+  | OpenTBroadcast
+  | OpenTTpdu
+  | ApduPacket
+  | OpenGroupcon
+  | GroupPacket
+  | ProgMode
+  | MaskVersion
+  | MIndividualAddressRead
+  | MIndividualAddressWrite
+  | ErrorAddrExists
+  | ErrorMoreDevice
+  | ErrorTimeout
+  | ErrorVerify
+  | McIndividual
+  | McConnection
+  | McRead
+  | McWrite
+  | McPropRead
+  | McPropWrite
+  | McPeiType
+  | McAdcRead
+  | McAuthorize
+  | McKeyWrite
+  | McMaskVersion
+  | McRestart
+  | McWriteNoverify
+  | McProgMode
+  | McPropDesc
+  | McPropScan
+  | LoadImage
+  | CacheEnable
+  | CacheDisable
+  | CacheClear
+  | CacheRemove
+  | CacheRead
+  | CacheReadNowait
+  | CacheLastUpdates
+  deriving (Show, Eq, Typeable)
 
-#define EIB_OPEN_T_CONNECTION           0x0020
-#define EIB_OPEN_T_INDIVIDUAL           0x0021
-#define EIB_OPEN_T_GROUP                0x0022
-#define EIB_OPEN_T_BROADCAST            0x0023
-#define EIB_OPEN_T_TPDU                 0x0024
-#define EIB_APDU_PACKET                 0x0025
-#define EIB_OPEN_GROUPCON               0x0026
-#define EIB_GROUP_PACKET                0x0027
+fromPacketType :: PacketType -> Word16
+fromPacketType InvalidRequest = 0
+fromPacketType ConnectionInuse = 1
+fromPacketType ProcessingError = 2
+fromPacketType Closed = 3
+fromPacketType ResetConnection = 4
+fromPacketType OpenBusmonitor = 16
+fromPacketType OpenBusmonitorText = 17
+fromPacketType OpenVbusmonitor = 18
+fromPacketType OpenVbusmonitorText = 19
+fromPacketType BusmonitorPacket = 20
+fromPacketType BusmonitorPacketTs = 21
+fromPacketType OpenBusmonitorTs = 22
+fromPacketType OpenVbusmonitorTs = 23
+fromPacketType OpenTConnection = 32
+fromPacketType OpenTIndividual = 33
+fromPacketType OpenTGroup = 34
+fromPacketType OpenTBroadcast = 35
+fromPacketType OpenTTpdu = 36
+fromPacketType ApduPacket = 37
+fromPacketType OpenGroupcon = 38
+fromPacketType GroupPacket = 39
+fromPacketType ProgMode = 48
+fromPacketType MaskVersion = 49
+fromPacketType MIndividualAddressRead = 50
+fromPacketType MIndividualAddressWrite = 64
+fromPacketType ErrorAddrExists = 65
+fromPacketType ErrorMoreDevice = 66
+fromPacketType ErrorTimeout = 67
+fromPacketType ErrorVerify = 68
+fromPacketType McIndividual = 73
+fromPacketType McConnection = 80
+fromPacketType McRead = 81
+fromPacketType McWrite = 82
+fromPacketType McPropRead = 83
+fromPacketType McPropWrite = 84
+fromPacketType McPeiType = 85
+fromPacketType McAdcRead = 86
+fromPacketType McAuthorize = 87
+fromPacketType McKeyWrite = 88
+fromPacketType McMaskVersion = 89
+fromPacketType McRestart = 90
+fromPacketType McWriteNoverify = 91
+fromPacketType McProgMode = 96
+fromPacketType McPropDesc = 97
+fromPacketType McPropScan = 98
+fromPacketType LoadImage = 99
+fromPacketType CacheEnable = 112
+fromPacketType CacheDisable = 113
+fromPacketType CacheClear = 114
+fromPacketType CacheRemove = 115
+fromPacketType CacheRead = 116
+fromPacketType CacheReadNowait = 117
+fromPacketType CacheLastUpdates = 118
 
-#define EIB_PROG_MODE                   0x0030
-#define EIB_MASK_VERSION                0x0031
-#define EIB_M_INDIVIDUAL_ADDRESS_READ   0x0032
+toPacketType :: Word16 -> PacketType      
+toPacketType 0 = InvalidRequest
+toPacketType 1 = ConnectionInuse
+toPacketType 2 = ProcessingError
+toPacketType 3 = Closed
+toPacketType 4 = ResetConnection
+toPacketType 16 = OpenBusmonitor
+toPacketType 17 = OpenBusmonitorText
+toPacketType 18 = OpenVbusmonitor
+toPacketType 19 = OpenVbusmonitorText
+toPacketType 20 = BusmonitorPacket
+toPacketType 21 = BusmonitorPacketTs
+toPacketType 22 = OpenBusmonitorTs
+toPacketType 23 = OpenVbusmonitorTs
+toPacketType 32 = OpenTConnection
+toPacketType 33 = OpenTIndividual
+toPacketType 34 = OpenTGroup
+toPacketType 35 = OpenTBroadcast
+toPacketType 36 = OpenTTpdu
+toPacketType 37 = ApduPacket
+toPacketType 38 = OpenGroupcon
+toPacketType 39 = GroupPacket
+toPacketType 48 = ProgMode
+toPacketType 49 = MaskVersion
+toPacketType 50 = MIndividualAddressRead
+toPacketType 64 = MIndividualAddressWrite
+toPacketType 65 = ErrorAddrExists
+toPacketType 66 = ErrorMoreDevice
+toPacketType 67 = ErrorTimeout
+toPacketType 68 = ErrorVerify
+toPacketType 73 = McIndividual
+toPacketType 80 = McConnection
+toPacketType 81 = McRead
+toPacketType 82 = McWrite
+toPacketType 83 = McPropRead
+toPacketType 84 = McPropWrite
+toPacketType 85 = McPeiType
+toPacketType 86 = McAdcRead
+toPacketType 87 = McAuthorize
+toPacketType 88 = McKeyWrite
+toPacketType 89 = McMaskVersion
+toPacketType 90 = McRestart
+toPacketType 91 = McWriteNoverify
+toPacketType 96 = McProgMode
+toPacketType 97 = McPropDesc
+toPacketType 98 = McPropScan
+toPacketType 99 = LoadImage
+toPacketType 112 = CacheEnable
+toPacketType 113 = CacheDisable
+toPacketType 114 = CacheClear
+toPacketType 115 = CacheRemove
+toPacketType 116 = CacheRead
+toPacketType 117 = CacheReadNowait
+toPacketType 118 = CacheLastUpdates
+toPacketType _ = error "unknown packet type"
 
-#define EIB_M_INDIVIDUAL_ADDRESS_WRITE  0x0040
-#define EIB_ERROR_ADDR_EXISTS           0x0041
-#define EIB_ERROR_MORE_DEVICE           0x0042
-#define EIB_ERROR_TIMEOUT               0x0043
-#define EIB_ERROR_VERIFY                0x0044
-
-#define EIB_MC_INDIVIDUAL               0x0049
-#define EIB_MC_CONNECTION               0x0050
-#define EIB_MC_READ                     0x0051
-#define EIB_MC_WRITE                    0x0052
-#define EIB_MC_PROP_READ                0x0053
-#define EIB_MC_PROP_WRITE               0x0054
-#define EIB_MC_PEI_TYPE                 0x0055
-#define EIB_MC_ADC_READ                 0x0056
-#define EIB_MC_AUTHORIZE                0x0057
-#define EIB_MC_KEY_WRITE                0x0058
-#define EIB_MC_MASK_VERSION             0x0059
-#define EIB_MC_RESTART                  0x005a
-#define EIB_MC_WRITE_NOVERIFY           0x005b
-#define EIB_MC_PROG_MODE                0x0060
-#define EIB_MC_PROP_DESC                0x0061
-#define EIB_MC_PROP_SCAN                0x0062
-#define EIB_LOAD_IMAGE                  0x0063
-
-#define EIB_CACHE_ENABLE                0x0070
-#define EIB_CACHE_DISABLE               0x0071
-#define EIB_CACHE_CLEAR                 0x0072
-#define EIB_CACHE_REMOVE                0x0073
-#define EIB_CACHE_READ                  0x0074
-#define EIB_CACHE_READ_NOWAIT           0x0075
-#define EIB_CACHE_LAST_UPDATES          0x0076
-|]
+$(genSingletons [''PacketType])
