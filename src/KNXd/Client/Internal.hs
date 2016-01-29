@@ -112,6 +112,7 @@ type family PacketArgs (d :: PacketDirection) (t :: PacketType)  where
   PacketArgs 'FromServer 'McWrite = HList '[]
   PacketArgs 'FromServer 'McWriteNoverify = HList '[]
   PacketArgs 'FromServer 'MIndividualAddressWrite = HList '[]
+  -- and more.
 
 
 -- |Default value for serializing unused fields
@@ -138,6 +139,8 @@ type family WirePacketArgs (d :: PacketDirection) (t :: PacketType) where
   WirePacketArgs 'ToServer 'OpenTBroadcast = HList '[Unused Word16, Bool]
   WirePacketArgs 'ToServer 'OpenTTpdu = HList '[IndividualAddress, Unused Bool]
   WirePacketArgs 'ToServer 'OpenGroupcon = HList '[Unused Word16, Bool]
+  -- and more...
+  
   WirePacketArgs d t = PacketArgs d t
 
 -- |Used to convert to/from wire representation
