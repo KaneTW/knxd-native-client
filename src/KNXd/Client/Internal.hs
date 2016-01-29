@@ -61,60 +61,31 @@ getPacketDirection = fromSing . getDirSing
 
 -- |The possible packet types. TODO: find a better way to comment
 type family PacketArgs (d :: PacketDirection) (t :: PacketType)  where
-  PacketArgs d 'ResetConnection = HList '[]
-  PacketArgs 'FromServer 'InvalidRequest = HList '[]
-  PacketArgs 'FromServer 'ConnectionInuse = HList '[]
-  PacketArgs 'FromServer 'ProcessingError = HList '[]
-  
-  PacketArgs d 'OpenBusmonitor = HList '[]
-  PacketArgs d 'OpenBusmonitorText = HList '[]
-  PacketArgs 'ToServer 'OpenBusmonitorTs = HList '[]
+  -- |Tick length in ns
   PacketArgs 'FromServer 'OpenBusmonitorTs = HList '[Word32]
-  PacketArgs d 'OpenVbusmonitor = HList '[]
-  PacketArgs d 'OpenVbusmonitorText = HList '[]
-  PacketArgs 'ToServer 'OpenVbusmonitorTs = HList '[]
   PacketArgs 'FromServer 'OpenVbusmonitorTs = HList '[Word32]
   
-  PacketArgs 'FromServer 'OpenTConnection = HList '[]
   -- |Destination address
-  PacketArgs 'ToServer   'OpenTConnection = HList '[IndividualAddress]
+  PacketArgs 'ToServer 'OpenTConnection = HList '[IndividualAddress]
   
-  PacketArgs 'FromServer 'OpenTIndividual = HList '[]
   -- |Destination address, write-only?
-  PacketArgs 'ToServer   'OpenTIndividual = HList '[IndividualAddress, Bool]
+  PacketArgs 'ToServer 'OpenTIndividual = HList '[IndividualAddress, Bool]
 
-  PacketArgs 'FromServer 'OpenTGroup = HList '[]
-  -- |Destination  address, write-only?
-  PacketArgs 'ToServer   'OpenTGroup = HList '[GroupAddress, Bool]
+  -- |Destination address, write-only?
+  PacketArgs 'ToServer 'OpenTGroup = HList '[GroupAddress, Bool]
   
-  PacketArgs 'FromServer 'OpenTBroadcast = HList '[]
   -- |write-only?
-  PacketArgs 'ToServer   'OpenTBroadcast = HList '[Bool]
+  PacketArgs 'ToServer 'OpenTBroadcast = HList '[Bool]
   
-  PacketArgs 'FromServer 'OpenTTpdu = HList '[]
   -- |Source address
-  PacketArgs 'ToServer   'OpenTTpdu = HList '[IndividualAddress]
-  
-  PacketArgs 'FromServer 'OpenGroupcon = HList '[]
-  -- |write-only?
-  PacketArgs 'ToServer   'OpenGroupcon = HList '[Bool]
-  
-  PacketArgs 'FromServer 'ErrorAddrExists = HList '[]
-  PacketArgs 'FromServer 'ErrorMoreDevice = HList '[]
-  PacketArgs 'FromServer 'ErrorTimeout = HList '[]
-  PacketArgs 'FromServer 'ErrorVerify = HList '[]
-  PacketArgs d 'CacheClear = HList '[]
-  PacketArgs d 'CacheDisable = HList '[]
-  PacketArgs d 'CacheEnable = HList '[]
-  PacketArgs 'FromServer 'CacheRemove = HList '[]
-  PacketArgs 'FromServer 'McConnection = HList '[]
-  PacketArgs 'FromServer 'McIndividual = HList '[]
-  PacketArgs 'FromServer 'McKeyWrite = HList '[]
-  PacketArgs 'FromServer 'McRestart = HList '[]
-  PacketArgs 'FromServer 'McWrite = HList '[]
-  PacketArgs 'FromServer 'McWriteNoverify = HList '[]
-  PacketArgs 'FromServer 'MIndividualAddressWrite = HList '[]
+  PacketArgs 'ToServer 'OpenTTpdu = HList '[IndividualAddress]
 
+  -- |write-only?
+  PacketArgs 'ToServer 'OpenGroupcon = HList '[Bool]
+
+  -- and more...
+
+  -- |Most cases are nullary, so fall back onto that
   PacketArgs d t = HList '[]
 
 
@@ -216,13 +187,13 @@ data SerializeEvidence d where
                      , (ConvertUnused (PacketArgs d t) (WirePacketArgs d t)))
                     => Sing t -> SerializeEvidence d
 
+--todo: not all packets can be sent or received
 -- big hack. if someone has a better solution PLEASE tell me
 serializeEvidence :: Sing (d :: PacketDirection) -> Sing (t :: PacketType) -> SerializeEvidence d
 serializeEvidence sd st = case sd of
-  SToServer -> $(sCases ''PacketType [|st|]
-                 [|SerializeEvidence st|])
-  SFromServer -> $(sCases ''PacketType [|st|]
-                   [|SerializeEvidence st|])
+  -- bug? with singletons requiring duplicate splices
+  SToServer   -> $(sCases ''PacketType [|st|] [|SerializeEvidence st|])
+  SFromServer -> $(sCases ''PacketType [|st|] [|SerializeEvidence st|])
                                    
 toWire :: ConvertUnused (PacketArgs d t) (WirePacketArgs d t)
        => KnxPacket d t -> WirePacketArgs d t
@@ -233,6 +204,15 @@ fromWire :: (ConvertUnused (WirePacketArgs d t) (PacketArgs d t), SingI t, SingI
          => WirePacketArgs d t -> KnxPacket d t
 fromWire = KnxPacket . convertUnused
 
+--todo: sigh. this doesn't actually work, i think
+{-
+Consider
+```
+case (r :: WireKnxPacket d) of
+  WireKnxPacket p -> <do stuff with p>
+```
+then we need to handle everything related to the packet type in that case block.
+-}
 instance SingI d => Serialize (WireKnxPacket d) where
   put (WireKnxPacket packet) = do
     putNested (putWord16be . fromIntegral) $ do
