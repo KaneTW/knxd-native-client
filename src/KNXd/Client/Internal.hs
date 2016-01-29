@@ -21,13 +21,17 @@ combineAddress :: Word16 -> Word16 -> Word16 -> Word16
 combineAddress h m l = shift (h .&. 0xf) 12 .|. shift (m .&. 0xf) 8 .|. (l .&. 0xff)
 
 -- |An individual, physical address (e.g. 0.0.1)
-newtype IndividualAddress = IndividualAddress Word16 deriving (Eq, Ord, ConvertWire)
+newtype IndividualAddress = IndividualAddress Word16
+                          deriving (Eq, Ord, ConvertWire)
+
 instance Show IndividualAddress where
   show (IndividualAddress addr) = let (h,m,l) = splitAddress addr
                                   in printf "%d.%d.%d" h m l
 
 -- |A group address (e.g. 1/2/13)
-newtype GroupAddress = GroupAddress Word16 deriving (Eq, Ord, ConvertWire)
+newtype GroupAddress = GroupAddress Word16
+                     deriving (Eq, Ord, ConvertWire)
+
 instance Show GroupAddress where
   show (GroupAddress addr) = let (h,m,l) = splitAddress addr
                              in printf "%d/%d/%d" h m l
@@ -133,7 +137,6 @@ instance ConvertUnused (HList k) (HList l)
 instance ConvertUnused (HList k) (HList l)
          => ConvertUnused (HList (Unused el ': k)) (HList l) where
   convertUnused (HCons _ k) = convertUnused k
-
 
 
 -- |Some types need nonstandard serialization, 
