@@ -1,4 +1,4 @@
-{-# LANGUAGE DefaultSignatures, RankNTypes #-}
+{-# LANGUAGE DefaultSignatures, TemplateHaskell, GeneralizedNewtypeDeriving #-}
 module KNXd.Client.Internal where
 
 import Data.Bits
@@ -6,6 +6,7 @@ import Data.ByteString (ByteString)
 import Data.HList
 import Data.Serialize
 import Data.Singletons
+import Data.Singletons.TH
 import Data.Word
 import Text.Printf
 import KNXd.Client.Internal.Types
@@ -20,13 +21,13 @@ combineAddress :: Word16 -> Word16 -> Word16 -> Word16
 combineAddress h m l = shift (h .&. 0xf) 12 .|. shift (m .&. 0xf) 8 .|. (l .&. 0xff)
 
 -- |An individual, physical address (e.g. 0.0.1)
-newtype IndividualAddress = IndividualAddress Word16 deriving (Eq, Ord)
+newtype IndividualAddress = IndividualAddress Word16 deriving (Eq, Ord, ConvertWire)
 instance Show IndividualAddress where
   show (IndividualAddress addr) = let (h,m,l) = splitAddress addr
                                   in printf "%d.%d.%d" h m l
 
 -- |A group address (e.g. 1/2/13)
-newtype GroupAddress = GroupAddress Word16 deriving (Eq, Ord)
+newtype GroupAddress = GroupAddress Word16 deriving (Eq, Ord, ConvertWire)
 instance Show GroupAddress where
   show (GroupAddress addr) = let (h,m,l) = splitAddress addr
                              in printf "%d/%d/%d" h m l
@@ -39,7 +40,8 @@ data KnxPacket (d :: PacketDirection) (t :: PacketType) where
 -- But we do know where it came from.
 data WireKnxPacket d where
   WireKnxPacket :: (ConvertWire (WirePacketArgs d t)
-                 , (ConvertUnused (PacketArgs d t) (WirePacketArgs d t)))
+                 , (ConvertUnused (PacketArgs d t) (WirePacketArgs d t))
+                 , (ConvertUnused (WirePacketArgs d t) (PacketArgs d t)))
                 => KnxPacket d t -> WireKnxPacket d
 
 -- |Type -> Sing
@@ -112,7 +114,8 @@ type family PacketArgs (d :: PacketDirection) (t :: PacketType)  where
   PacketArgs 'FromServer 'McWrite = HList '[]
   PacketArgs 'FromServer 'McWriteNoverify = HList '[]
   PacketArgs 'FromServer 'MIndividualAddressWrite = HList '[]
-  -- and more.
+
+  PacketArgs d t = HList '[]
 
 
 -- |Default value for serializing unused fields
@@ -126,10 +129,8 @@ instance DefaultValue Bool where
   defaultValue = False
 
 -- |Unused fields that need to be present on the wire but don't have any actual semantics
-newtype Unused a = Unused a deriving Show
-
-mkUnused :: DefaultValue a => Unused a
-mkUnused = Unused defaultValue
+data Unused a where
+  Unused :: DefaultValue a => Unused a
 
 -- |Describes how each packet type looks on the wire
 type family WirePacketArgs (d :: PacketDirection) (t :: PacketType) where
@@ -152,7 +153,7 @@ instance ConvertUnused (HList '[]) (HList '[]) where
 
 instance (DefaultValue el, ConvertUnused (HList k) (HList l))
          => ConvertUnused (HList k) (HList (Unused el ': l)) where
-  convertUnused k = HCons mkUnused $ convertUnused k
+  convertUnused k = HCons Unused $ convertUnused k
 
 instance ConvertUnused (HList k) (HList l)
          => ConvertUnused (HList (e ': k)) (HList (e ': l)) where
@@ -163,13 +164,6 @@ instance ConvertUnused (HList k) (HList l)
   convertUnused (HCons _ k) = convertUnused k
 
 
-toWire :: ConvertUnused (PacketArgs d t) (WirePacketArgs d t)
-       => KnxPacket d t -> WirePacketArgs d t
-toWire (KnxPacket args) = convertUnused args
-
-fromWire :: (ConvertUnused (WirePacketArgs d t) (PacketArgs d t), SingI t, SingI d)
-         => WirePacketArgs d t -> KnxPacket d t
-fromWire = KnxPacket . convertUnused
 
 -- |Some types need nonstandard serialization, 
 -- so it's easier to just serialize in a special class.
@@ -185,6 +179,10 @@ class ConvertWire a where
 instance ConvertWire Word16 where
   putWire = putWord16be
   getWire = getWord16be
+
+instance ConvertWire Word32 where
+  putWire = putWord32be
+  getWire = getWord32be
 
 instance ConvertWire Bool where
   putWire True  = putWord8 0xff
@@ -207,6 +205,34 @@ instance (ConvertWire e, ConvertWire (HList l))
   putWire (HCons e l) = putWire e >> putWire l
   getWire = HCons <$> getWire <*> getWire
 
+instance (ConvertWire a, DefaultValue a) => ConvertWire (Unused a) where
+  putWire Unused = putWire (defaultValue :: a)
+  getWire = return Unused
+
+
+data SerializeEvidence d where
+  SerializeEvidence :: (ConvertWire (WirePacketArgs d t)
+                     , (ConvertUnused (WirePacketArgs d t) (PacketArgs d t))
+                     , (ConvertUnused (PacketArgs d t) (WirePacketArgs d t)))
+                    => Sing t -> SerializeEvidence d
+
+-- big hack. if someone has a better solution PLEASE tell me
+serializeEvidence :: Sing (d :: PacketDirection) -> Sing (t :: PacketType) -> SerializeEvidence d
+serializeEvidence sd st = case sd of
+  SToServer -> $(sCases ''PacketType [|st|]
+                 [|SerializeEvidence st|])
+  SFromServer -> $(sCases ''PacketType [|st|]
+                   [|SerializeEvidence st|])
+                                   
+toWire :: ConvertUnused (PacketArgs d t) (WirePacketArgs d t)
+       => KnxPacket d t -> WirePacketArgs d t
+toWire (KnxPacket args) = convertUnused args
+
+
+fromWire :: (ConvertUnused (WirePacketArgs d t) (PacketArgs d t), SingI t, SingI d)
+         => WirePacketArgs d t -> KnxPacket d t
+fromWire = KnxPacket . convertUnused
+
 instance SingI d => Serialize (WireKnxPacket d) where
   put (WireKnxPacket packet) = do
     putNested (putWord16be . fromIntegral) $ do
@@ -216,8 +242,9 @@ instance SingI d => Serialize (WireKnxPacket d) where
   get = getNested (fromIntegral <$> getWord16be) $ do
     --todo: instance of Serialize for packetType to avoid error
     t <- toPacketType <$> getWord16be
+    let sd = sing :: Sing d
     case toSing t of
-      SomeSing (sb :: Sing (t :: PacketType)) -> do
-        packet :: KnxPacket d t <- fromWire <$> getWire
-        undefined -- return $ WireKnxPacket packet
-
+      SomeSing st -> case serializeEvidence sd st of
+        SerializeEvidence (st' :: Sing t') -> withSingI st' $ do
+          packet :: KnxPacket d t' <- fromWire <$> getWire
+          return $ WireKnxPacket packet
