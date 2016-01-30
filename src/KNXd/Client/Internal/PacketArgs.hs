@@ -90,7 +90,7 @@ type family PacketArgs (d :: PacketDirection) (s :: ConnectionState) (t :: Packe
   -- |Clear the group cache for the specified group address
   PacketArgs 'ToServer 'Fresh 'CacheRemove = HList '[GroupAddress]
 
-  -- |Reuqest the last group telegram sent from the specified address
+  -- |Request the last group telegram sent from the specified address
   -- with the specified maximum age.
   -- * If an entry is found and age is 0, return the entry
   -- * If an entry is found and age is non-zero, return the entry
