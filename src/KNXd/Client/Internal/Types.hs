@@ -1,11 +1,21 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, DefaultSignatures #-}
 module KNXd.Client.Internal.Types where
 
-import Data.Word
 import Data.Typeable
+import Data.Word
 import Data.Singletons.TH
 
-$(singletons [d|data PacketDirection = FromServer | ToServer deriving (Show, Eq, Typeable)|])
+data PacketDirection
+  = FromServer
+  | ToServer
+  deriving (Show, Eq, Typeable)
+
+data ProgCommand
+  = ProgOn
+  | ProgOff
+  | ProgToggle
+  | ProgStatus
+  deriving (Show, Eq, Typeable, Enum, Bounded)
 
 data ConnectionState
   = Fresh
@@ -21,7 +31,7 @@ data ConnectionState
   | ManagementConnection
   | ConnectionlessManagementConnection
   | Stateless
-  deriving (Show, Eq, Typeable)
+  deriving (Show, Eq, Typeable, Enum, Bounded)
 
 data PacketType
   = InvalidRequest
@@ -78,6 +88,8 @@ data PacketType
   | CacheReadNowait
   | CacheLastUpdates
   deriving (Show, Eq, Typeable)
+
+$(genSingletons [''PacketType, ''ConnectionState, ''PacketDirection])
 
 fromPacketType :: PacketType -> Word16
 fromPacketType InvalidRequest = 0
@@ -189,5 +201,3 @@ toPacketType 116 = CacheRead
 toPacketType 117 = CacheReadNowait
 toPacketType 118 = CacheLastUpdates
 toPacketType _ = error "unknown packet type"
-
-$(genSingletons [''PacketType, ''ConnectionState])

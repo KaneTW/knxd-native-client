@@ -1,4 +1,4 @@
-{-# LANGUAGE DefaultSignatures, TemplateHaskell, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DefaultSignatures, TemplateHaskell, GeneralizedNewtypeDeriving, RankNTypes #-}
 module KNXd.Client.Internal where
 
 import Data.Bits
@@ -7,8 +7,10 @@ import Data.HList
 import Data.Serialize
 import Data.Singletons
 import Data.Singletons.TH
+import Data.Void
 import Data.Word
 import Text.Printf
+import KNXd.Client.Internal.TH
 import KNXd.Client.Internal.Types
 
 splitAddress :: Word16 -> (Word16, Word16, Word16)
@@ -38,7 +40,7 @@ instance Show GroupAddress where
 
 -- |A KNX packet. Arguments are determined by it's type, see 'PacketArgs'
 data KnxPacket (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType) where
-  KnxPacket :: Sing d -> Sing s -> Sing t -> PacketArgs d t -> KnxPacket d t
+  KnxPacket :: Sing d -> Sing s -> Sing t -> PacketArgs d s t -> KnxPacket d s t
 
 -- |When receiving a packet, we don't know what PacketType it's indexed by.
 -- But we do know where it came from.
@@ -46,7 +48,7 @@ data WireKnxPacket d s where
   WireKnxPacket :: (ConvertWire (WirePacketArgs d s t)
                  , (ConvertUnused (PacketArgs d s t) (WirePacketArgs d s t))
                  , (ConvertUnused (WirePacketArgs d s t) (PacketArgs d s t)))
-                => KnxPacket d s t -> WireKnxPacket d
+                => KnxPacket d s t -> WireKnxPacket d s
 
 -- |Type -> Term
 getPacketType :: KnxPacket d s t -> PacketType
@@ -117,7 +119,7 @@ type family PacketArgs (d :: PacketDirection) (s :: ConnectionState) (t :: Packe
   PacketArgs 'ToServer 'Fresh 'ProgMode = HList '[IndividualAddress, ProgCommand]
   -- |Technically, a state is only returned if ProgCommand ProgStatus is sent
   -- but I'm not adding another type index.
-  PacketArgs 'FromServer 'Fresh 'ProgMode = HList '[Maybe State]
+  PacketArgs 'FromServer 'Fresh 'ProgMode = HList '[Maybe Bool]
 
   -- |Write a new address to a device in programming mode.
   -- Requires exactly one device in programming mode.
@@ -170,7 +172,7 @@ type family PacketArgs (d :: PacketDirection) (s :: ConnectionState) (t :: Packe
   PacketArgs 'FromServer 'McWriteNoverify = HList '[]-}
 
   -- |Unless we explicitly have a type here, forbid it.
-  PacketArgs d t = Void
+  PacketArgs d s t = Void
 
 
 -- |Default value for serializing unused fields
@@ -188,22 +190,22 @@ data Unused a where
   Unused :: DefaultValue a => Unused a
 
 -- |Describes how each packet type looks on the wire
-type family WirePacketArgs (d :: PacketDirection) (t :: PacketType) where
-  WirePacketArgs 'ToServer 'OpenTConnection = HList '[IndividualAddress, Unused Bool]
-  WirePacketArgs 'ToServer 'OpenTIndividual = HList '[IndividualAddress, Bool]
-  WirePacketArgs 'ToServer 'OpenTGroup = HList '[GroupAddress, Bool]
-  WirePacketArgs 'ToServer 'OpenTBroadcast = HList '[Unused Word16, Bool]
-  WirePacketArgs 'ToServer 'OpenTTpdu = HList '[IndividualAddress, Unused Bool]
-  WirePacketArgs 'ToServer 'OpenGroupcon = HList '[Unused Word16, Bool]
+type family WirePacketArgs (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType) where
+  WirePacketArgs 'ToServer 'Fresh 'OpenTConnection = HList '[IndividualAddress, Unused Bool]
+  WirePacketArgs 'ToServer 'Fresh 'OpenTIndividual = HList '[IndividualAddress, Bool]
+  WirePacketArgs 'ToServer 'Fresh 'OpenTGroup = HList '[GroupAddress, Bool]
+  WirePacketArgs 'ToServer 'Fresh 'OpenTBroadcast = HList '[Unused Word16, Bool]
+  WirePacketArgs 'ToServer 'Fresh 'OpenTTpdu = HList '[IndividualAddress, Unused Bool]
+  WirePacketArgs 'ToServer 'Fresh 'OpenGroupcon = HList '[Unused Word16, Bool]
   -- and more...
   
-  WirePacketArgs d t = PacketArgs d t
+  WirePacketArgs d s t = PacketArgs d s t
 
 -- |Used to convert to/from wire representation
 class ConvertUnused k l where
   convertUnused :: k -> l
 
-instance ConvertUnused (HList '[]) (HList '[]) where
+instance {-# INCOHERENT #-} ConvertUnused (HList k) (HList k) where
   convertUnused = id
 
 instance (DefaultValue el, ConvertUnused (HList k) (HList l))
@@ -260,15 +262,15 @@ instance ConvertWire ByteString where
 instance ConvertWire e => ConvertWire [e] where
   putWire = mapM_ putWire
   getWire = do
-    rem <- remaining
-    let count = rem `div` 2
+    len <- remaining
+    let count = len `div` 2
     replicateM count getWire
 
 instance ConvertWire e => ConvertWire (Maybe e) where
   putWire = mapM_ putWire
   getWire = do
-    rem <- remaining
-    case rem of
+    len <- remaining
+    case len of
       0 -> return Nothing
       _ -> Just <$> getWire
 
@@ -281,36 +283,39 @@ instance (ConvertWire e, ConvertWire (HList l))
   putWire (HCons e l) = putWire e >> putWire l
   getWire = HCons <$> getWire <*> getWire
 
+instance ConvertWire ProgCommand where
+  putWire = putWord8 . fromIntegral . fromEnum
+  getWire = (toEnum . fromIntegral) <$> getWord8
+
 instance (ConvertWire a, DefaultValue a) => ConvertWire (Unused a) where
   putWire Unused = putWire (defaultValue :: a)
   getWire = return Unused
 
 instance ConvertWire Void where
-  putWire _ = fail "Cannot serialize Void"
-  getWire = fail "Cannot deserialize Void"
+  putWire = absurd
+  getWire = fail "Bug in packet description. This should never happen."
 
-data SerializeEvidence d where
-  SerializeEvidence :: (ConvertWire (WirePacketArgs d t)
-                     , (ConvertUnused (WirePacketArgs d t) (PacketArgs d t))
-                     , (ConvertUnused (PacketArgs d t) (WirePacketArgs d t)))
-                    => Sing t -> SerializeEvidence d
+data ConvertibleProof d s where
+  ConvertibleProof :: (ConvertWire (WirePacketArgs d s t)
+                   , (ConvertUnused (WirePacketArgs d s t) (PacketArgs d s t))
+                   , (ConvertUnused (PacketArgs d s t) (WirePacketArgs d s t)))
+                   => Sing (t :: PacketType) -> ConvertibleProof d s
 
--- big hack. if someone has a better solution PLEASE tell me
-serializeEvidence :: Sing (d :: PacketDirection) -> Sing (t :: PacketType) -> SerializeEvidence d
-serializeEvidence sd st = case sd of
-  -- bug? with singletons requiring duplicate splices
-  SToServer   -> $(sCases ''PacketType [|st|] [|SerializeEvidence st|])
-  SFromServer -> $(sCases ''PacketType [|st|] [|SerializeEvidence st|])
+-- i really hope to find a better solution because this case statement is HUGE
+convertibleProof :: Sing (d :: PacketDirection)
+                 -> Sing (s :: ConnectionState)
+                 -> Sing (t :: PacketType) -> ConvertibleProof d s
+convertibleProof sd ss st = $(proofCases [|sd|] [|ss|] [|st|] [|ConvertibleProof st|])
                                    
-toWire :: ConvertUnused (PacketArgs d t) (WirePacketArgs d t)
-       => KnxPacket d t -> WirePacketArgs d t
-toWire (KnxPacket _ _ args) = convertUnused args
+toWire :: ConvertUnused (PacketArgs d s t) (WirePacketArgs d s t)
+       => KnxPacket d s t -> WirePacketArgs d s t
+toWire (KnxPacket _ _ _ args) = convertUnused args
 
-fromWire :: ConvertUnused (WirePacketArgs d t) (PacketArgs d t)
-         => Sing d -> Sing t -> WirePacketArgs d t -> KnxPacket d t
-fromWire sd st = KnxPacket sd st . convertUnused
+fromWire :: ConvertUnused (WirePacketArgs d s t) (PacketArgs d s t)
+         => Sing d -> Sing s -> Sing t -> WirePacketArgs d s t -> KnxPacket d s t
+fromWire sd ss st = KnxPacket sd ss st . convertUnused
 
-instance SingI d => Serialize (WireKnxPacket d) where
+instance (SingI d, SingI s) => Serialize (WireKnxPacket d s) where
   put (WireKnxPacket packet) =
     putNested (putWord16be . fromIntegral) $ do
       putWire . fromPacketType . getPacketType $ packet
@@ -320,8 +325,9 @@ instance SingI d => Serialize (WireKnxPacket d) where
     --todo: instance of Serialize for packetType to avoid error
     t <- toPacketType <$> getWord16be
     let sd = sing :: Sing d
+    let ss = sing :: Sing s
     case toSing t of
-      SomeSing st -> case serializeEvidence sd st of
-        SerializeEvidence (st' :: Sing t') -> do
-          packet :: KnxPacket d t' <- fromWire sd st' <$> getWire
+      SomeSing st -> case convertibleProof sd ss st :: ConvertibleProof d s of
+        ConvertibleProof (st' :: Sing t') -> do
+          packet :: KnxPacket d s t' <- fromWire sd ss st' <$> getWire
           return $ WireKnxPacket packet
