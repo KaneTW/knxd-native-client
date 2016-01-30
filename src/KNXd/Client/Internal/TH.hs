@@ -18,11 +18,13 @@ proofCases dExp sExp tExp body wBody = do
     mkMatch eqn = match (mkPat eqn) (normalB $ realBody eqn) []
     mkPat eqn = tupP . map typeToPat $ getTypes eqn
     getTypes (TySynEqn ts _) = ts
-    typeToPat (ConT n) = conP (mkName $ 'S' : nameBase n) []
-    typeToPat (PromotedT n) = conP (mkName $ 'S' : nameBase n) []
+    typeToPat (ConT n) = conP (singName n) []
+    typeToPat (PromotedT n) = conP (singName  n) []
     typeToPat (VarT _) = wildP
     typeToPat t = error $ "Unsupported type " ++ show t
     
     realBody (TySynEqn [VarT _, VarT _, VarT _] _) = wBody
     realBody _ = body
+
+    singName n = (mkName $ 'S' : nameBase n)
   
