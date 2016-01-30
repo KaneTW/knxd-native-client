@@ -1,9 +1,37 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, DefaultSignatures #-}
 module KNXd.Client.Internal.Types where
 
+import Data.Bits
 import Data.Typeable
 import Data.Word
 import Data.Singletons.TH
+import Text.Printf
+
+splitAddress :: Word16 -> (Word16, Word16, Word16)
+splitAddress addr = let h = shift addr (-12)
+                        m = shift (addr .&. 0x0f00) (-8)
+                        l = addr .&. 0xff
+                    in (h,m,l)
+
+combineAddress :: Word16 -> Word16 -> Word16 -> Word16
+combineAddress h m l = shift (h .&. 0xf) 12 .|. shift (m .&. 0xf) 8 .|. (l .&. 0xff)
+
+-- |An individual, physical address (e.g. 0.0.1)
+newtype IndividualAddress = IndividualAddress Word16
+                          deriving (Eq, Ord)
+
+instance Show IndividualAddress where
+  show (IndividualAddress addr) = let (h,m,l) = splitAddress addr
+                                  in printf "%d.%d.%d" h m l
+
+-- |A group address (e.g. 1/2/13)
+newtype GroupAddress = GroupAddress Word16
+                     deriving (Eq, Ord)
+
+instance Show GroupAddress where
+  show (GroupAddress addr) = let (h,m,l) = splitAddress addr
+                             in printf "%d/%d/%d" h m l
+
 
 data PacketDirection
   = FromServer
