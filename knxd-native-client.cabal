@@ -18,7 +18,9 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     KNXd.Client, KNXd.Client.Internal
-  other-modules:       KNXd.Client.Internal.Types, KNXd.Client.Internal.TH
+                     , KNXd.Client.Internal.PacketArgs
+                     , KNXd.Client.Internal.Types
+  other-modules:       KNXd.Client.Internal.TH
   default-extensions:  DataKinds, PolyKinds, GADTs, StandaloneDeriving
                      , TypeFamilies, ScopedTypeVariables, FlexibleInstances
                      , FlexibleContexts, MultiParamTypeClasses, TypeOperators

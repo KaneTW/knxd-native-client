@@ -16,7 +16,7 @@ splitAddress addr = let h = shift addr (-12)
 combineAddress :: Word16 -> Word16 -> Word16 -> Word16
 combineAddress h m l = shift (h .&. 0xf) 12 .|. shift (m .&. 0xf) 8 .|. (l .&. 0xff)
 
--- |An individual, physical address (e.g. 0.0.1)
+-- |An individual, physical address (e.g. @0.0.1@)
 newtype IndividualAddress = IndividualAddress Word16
                           deriving (Eq, Ord)
 
@@ -24,7 +24,7 @@ instance Show IndividualAddress where
   show (IndividualAddress addr) = let (h,m,l) = splitAddress addr
                                   in printf "%d.%d.%d" h m l
 
--- |A group address (e.g. 1/2/13)
+-- |A group address (e.g. @1\/2\/13@)
 newtype GroupAddress = GroupAddress Word16
                      deriving (Eq, Ord)
 

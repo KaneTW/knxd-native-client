@@ -16,7 +16,7 @@ import KNXd.Client.Internal.PacketArgs
 data KnxPacket (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType) where
   KnxPacket :: Sing d -> Sing s -> Sing t -> PacketArgs d s t -> KnxPacket d s t
 
--- |When receiving a packet, we don't know what PacketType it's indexed by.
+-- |When receiving a packet, we don't know what 'PacketType' it's indexed by.
 -- But we do know where it came from.
 data WireKnxPacket d s where
   WireKnxPacket :: (ConvertWire (WirePacketArgs d s t)
@@ -24,7 +24,6 @@ data WireKnxPacket d s where
                  , (ConvertUnused (WirePacketArgs d s t) (PacketArgs d s t)))
                 => KnxPacket d s t -> WireKnxPacket d s
 
--- |Type -> Term
 getPacketType :: KnxPacket d s t -> PacketType
 getPacketType (KnxPacket _ _ st _) = fromSing st
 
@@ -111,7 +110,7 @@ instance ConvertWire Bool where
 
 -- |This instance assumes an isolate block and that every 'ByteString' comes last
 instance ConvertWire ByteString where
-  -- |Note that this uses putByteString to avoid writing length
+  -- |Note that this uses 'putByteString' to avoid writing length
   putWire = putByteString
   getWire = remaining >>= getByteString
 
