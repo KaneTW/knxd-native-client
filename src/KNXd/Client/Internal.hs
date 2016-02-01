@@ -18,15 +18,14 @@ deriving instance Show (WireKnxPacket d s)
 
 -- Automatic Eq generation doesn't support propositional equality, sadly
 instance Eq (WireKnxPacket d s) where
-  (WireKnxPacket (KnxPacket sd1 ss1 st1 a1)) == (WireKnxPacket (KnxPacket sd2 ss2 st2 a2))
-    = case sd1 %~ sd2 of
-    Proved _ -> case ss1 %~ ss2 of
-      Proved _ -> case st1 %~ st2 of
-        Proved Refl -> a1 == a2
+  (WireKnxPacket p1) == (WireKnxPacket p2)
+    = case packetTypeSing p1 %~ packetTypeSing p2 of
+        Proved Refl -> p1 == p2
         _ -> False
-      _ -> False
-    _ -> False
 
+--todo: make records?
+packetTypeSing :: KnxPacket d s t -> Sing t
+packetTypeSing (KnxPacket _ _ st _) = st
 
 getPacketType :: KnxPacket d s t -> PacketType
 getPacketType (KnxPacket _ _ st _) = fromSing st
