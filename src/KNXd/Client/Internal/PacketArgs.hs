@@ -2,93 +2,248 @@ module KNXd.Client.Internal.PacketArgs where
 
 import Data.ByteString (ByteString)
 import Data.HList
+import Data.Singletons
 import Data.Word
+import KNXd.Client.Internal.Serialize
 import KNXd.Client.Internal.Types
-       
--- |The possible packet types. TODO: find a better way to comment
-type family PacketArgs (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType)
 
-type instance PacketArgs 'ToServer s 'ResetConnection = HList '[]
-type instance PacketArgs 'FromServer 'Fresh 'ResetConnection = HList '[]
+-- |A KNX packet. Arguments are determined by it's type, see 'PacketArgs'
+data KnxPacket (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType) where
+  KnxPacket :: Sing d -> Sing s -> Sing t -> PacketArgs d s t -> KnxPacket d s t
+
+deriving instance PacketC d s t => Show (KnxPacket d s t)
+deriving instance PacketC d s t => Eq (KnxPacket d s t)
+
+--TODO: maybe it might be better to split this into two classes?
+-- |Used to convert to/from wire representation (fill in/remove any Unused vaues)
+class ConvertUnused k l where
+  convertUnused :: k -> l
+
+instance ConvertUnused (HList '[]) (HList '[]) where
+  convertUnused = id
+
+instance (DefaultValue el, ConvertUnused (HList k) (HList l))
+         => ConvertUnused (HList k) (HList (Unused el ': l)) where
+  convertUnused k = HCons Unused $ convertUnused k
+
+instance ConvertUnused (HList k) (HList l)
+         => ConvertUnused (HList (e ': k)) (HList (e ': l)) where
+  convertUnused (HCons el k) = HCons el $ convertUnused k
+
+instance ConvertUnused (HList k) (HList l)
+         => ConvertUnused (HList (Unused el ': k)) (HList l) where
+  convertUnused (HCons _ k) = convertUnused k
+
+
+-- |Default value for serializing unused fields
+class DefaultValue a where
+  defaultValue :: a
+
+instance DefaultValue Word16 where
+  defaultValue = 0
+
+instance DefaultValue Bool where
+  defaultValue = False
+
+-- |Unused fields that need to be present on the wire but don't have any actual semantics
+data Unused a where
+  Unused :: DefaultValue a => Unused a
+
+instance (ConvertWire a, DefaultValue a) => ConvertWire (Unused a) where
+  putWire Unused = putWire (defaultValue :: a)
+  getWire = return Unused
+
+
+-- |Class and associated type family for valid packet types
+class (Eq (PacketArgs d s t), Show (PacketArgs d s t)
+      , ConvertWire (WirePacketArgs d s t))
+  => PacketC (d :: PacketDirection) (s :: ConnectionState) (t :: PacketType) where
+  type PacketArgs d s t :: *
+  type WirePacketArgs d s t :: *
+  type instance WirePacketArgs d s t = PacketArgs d s t
+
+  -- |Prepare a KnxPacket for sending
+  toWire :: KnxPacket d s t -> WirePacketArgs d s t
+
+  default toWire :: WirePacketArgs d s t ~ PacketArgs d s t
+                 => KnxPacket d s t -> PacketArgs d s t
+  toWire (KnxPacket _ _ _ args) = args
+
+  -- |Convert a received packet to an actual packet
+  fromWire :: Sing d -> Sing s  -> Sing t -> WirePacketArgs d s t -> KnxPacket d s t
+
+  default fromWire :: (PacketArgs d s t ~ WirePacketArgs d s t)
+                   => Sing d -> Sing s -> Sing t -> PacketArgs d s t -> KnxPacket d s t
+  fromWire = KnxPacket
   
-type instance PacketArgs 'FromServer 'Broken 'InvalidRequest = HList '[]
-type instance PacketArgs 'FromServer s 'ConnectionInuse = HList '[]
-type instance PacketArgs 'FromServer s 'ProcessingError = HList '[]
-type instance PacketArgs 'FromServer s 'ErrorAddrExists = HList '[]
-type instance PacketArgs 'FromServer s 'ErrorMoreDevice = HList '[]
-type instance PacketArgs 'FromServer s 'ErrorTimeout = HList '[]
-type instance PacketArgs 'FromServer s 'ErrorVerify = HList '[]
+
+instance PacketC 'ToServer s 'ResetConnection where 
+  type PacketArgs 'ToServer s 'ResetConnection = HList '[]
+instance PacketC 'FromServer 'Fresh 'ResetConnection where 
+  type PacketArgs 'FromServer 'Fresh 'ResetConnection = HList '[]
   
-type instance PacketArgs 'ToServer 'Fresh 'OpenBusmonitor = HList '[]
-type instance PacketArgs 'FromServer 'Busmonitor 'OpenBusmonitor = HList '[]
-type instance PacketArgs 'ToServer 'Fresh 'OpenBusmonitorText = HList '[]
-type instance PacketArgs 'FromServer 'Busmonitor 'OpenBusmonitorText = HList '[]
-type instance PacketArgs 'ToServer 'Fresh 'OpenBusmonitorTs = HList '[]
-type instance PacketArgs 'FromServer 'BusmonitorTs 'OpenBusmonitorTs = HList '[Word32]
+instance PacketC 'FromServer 'Broken 'InvalidRequest where 
+  type PacketArgs 'FromServer 'Broken 'InvalidRequest = HList '[]
+
+instance PacketC 'FromServer s 'ConnectionInuse where 
+  type PacketArgs 'FromServer s 'ConnectionInuse = HList '[]
+
+instance PacketC 'FromServer s 'ProcessingError where 
+  type PacketArgs 'FromServer s 'ProcessingError = HList '[]
   
-type instance PacketArgs 'ToServer 'Fresh 'OpenVbusmonitor = HList '[]
-type instance PacketArgs 'FromServer 'Busmonitor 'OpenVbusmonitor = HList '[]
-type instance PacketArgs 'ToServer 'Fresh 'OpenVbusmonitorText = HList '[]
-type instance PacketArgs 'FromServer 'Busmonitor 'OpenVbusmonitorText = HList '[]
-type instance PacketArgs 'ToServer 'Fresh 'OpenVbusmonitorTs = HList '[]
-type instance PacketArgs 'FromServer 'BusmonitorTs 'OpenVbusmonitorTs = HList '[Word32]
+-- |Technically these can only follow MIndividualAddressWrite. But adding another state is meh
+instance PacketC 'FromServer 'Fresh 'ErrorAddrExists where 
+  type PacketArgs 'FromServer 'Fresh 'ErrorAddrExists = HList '[]
+
+instance PacketC 'FromServer 'Fresh 'ErrorMoreDevice where 
+  type PacketArgs 'FromServer 'Fresh 'ErrorMoreDevice = HList '[]
+
+instance PacketC 'FromServer 'Fresh 'ErrorTimeout where 
+  type PacketArgs 'FromServer 'Fresh 'ErrorTimeout = HList '[]
+
+instance PacketC 'FromServer 'Fresh 'ErrorVerify where 
+  type PacketArgs 'FromServer 'Fresh 'ErrorVerify = HList '[]
+
+-- |Busmonitor stuff
+instance PacketC 'ToServer 'Fresh 'OpenBusmonitor where 
+  type PacketArgs 'ToServer 'Fresh 'OpenBusmonitor = HList '[]
+instance PacketC 'FromServer 'Busmonitor 'OpenBusmonitor where 
+  type PacketArgs 'FromServer 'Busmonitor 'OpenBusmonitor = HList '[]
+
+instance PacketC 'ToServer 'Fresh 'OpenBusmonitorText where 
+  type PacketArgs 'ToServer 'Fresh 'OpenBusmonitorText = HList '[]
+instance PacketC 'FromServer 'Busmonitor 'OpenBusmonitorText where 
+  type PacketArgs 'FromServer 'Busmonitor 'OpenBusmonitorText = HList '[]
+
+instance PacketC 'ToServer 'Fresh 'OpenBusmonitorTs where 
+  type PacketArgs 'ToServer 'Fresh 'OpenBusmonitorTs = HList '[]
+instance PacketC 'FromServer 'BusmonitorTs 'OpenBusmonitorTs where 
+  type PacketArgs 'FromServer 'BusmonitorTs 'OpenBusmonitorTs = HList '[Word32]
+  
+instance PacketC 'ToServer 'Fresh 'OpenVbusmonitor where 
+  type PacketArgs 'ToServer 'Fresh 'OpenVbusmonitor = HList '[]
+instance PacketC 'FromServer 'Busmonitor 'OpenVbusmonitor where 
+  type PacketArgs 'FromServer 'Busmonitor 'OpenVbusmonitor = HList '[]
+
+instance PacketC 'ToServer 'Fresh 'OpenVbusmonitorText where 
+  type PacketArgs 'ToServer 'Fresh 'OpenVbusmonitorText = HList '[]
+instance PacketC 'FromServer 'Busmonitor 'OpenVbusmonitorText where 
+  type PacketArgs 'FromServer 'Busmonitor 'OpenVbusmonitorText = HList '[]
+
+instance PacketC 'ToServer 'Fresh 'OpenVbusmonitorTs where 
+  type PacketArgs 'ToServer 'Fresh 'OpenVbusmonitorTs = HList '[]
+instance PacketC 'FromServer 'BusmonitorTs 'OpenVbusmonitorTs where 
+  type PacketArgs 'FromServer 'BusmonitorTs 'OpenVbusmonitorTs = HList '[Word32]
 
 -- i think i can fold these into one PacketType.
 -- |Destination address
-type instance PacketArgs 'ToServer   'Fresh 'OpenTConnection = HList '[IndividualAddress]
-type instance PacketArgs 'FromServer 'Connection 'OpenTConnection = HList '[]
--- |Destination address, write-only?
-type instance PacketArgs 'ToServer   'Fresh 'OpenTIndividual = HList '[IndividualAddress, Bool]
-type instance PacketArgs 'FromServer 'Individual 'OpenTIndividual = HList '[]
--- |Destination  address, write-only?
-type instance PacketArgs 'ToServer   'Fresh 'OpenTGroup = HList '[GroupAddress, Bool]
-type instance PacketArgs 'FromServer 'Group 'OpenTGroup = HList '[]
--- |write-only?
-type instance PacketArgs 'ToServer   'Fresh 'OpenTBroadcast = HList '[Bool]
-type instance PacketArgs 'FromServer 'Broadcast 'OpenTBroadcast = HList '[]
--- |Source address
-type instance PacketArgs 'ToServer   'Fresh 'OpenTTpdu = HList '[IndividualAddress]
-type instance PacketArgs 'FromServer 'Tpdu 'OpenTTpdu = HList '[]
--- |write-only?
-type instance PacketArgs 'ToServer   'Fresh 'OpenGroupcon = HList '[Bool]
-type instance PacketArgs 'FromServer 'GroupSocket 'OpenGroupcon = HList '[]
-
-type instance PacketArgs 'ToServer 'Fresh 'McConnection = HList '[]
-type instance PacketArgs 'FromServer 'ManagementConnection 'McConnection = HList '[]
+instance PacketC 'ToServer 'Fresh 'OpenTConnection where 
+  type PacketArgs 'ToServer 'Fresh 'OpenTConnection = HList '[IndividualAddress]
+  type WirePacketArgs 'ToServer 'Fresh 'OpenTConnection = HList '[IndividualAddress, Unused Bool]
   
-type instance PacketArgs 'ToServer 'Fresh 'McIndividual = HList '[IndividualAddress]
-type instance PacketArgs 'FromServer 'ConnectionlessManagementConnection 'McIndividual = HList '[]
+  toWire (KnxPacket _ _ _ args) = convertUnused args
+  fromWire ss sd st = KnxPacket ss sd st . convertUnused
+  
+instance PacketC 'FromServer 'Connection 'OpenTConnection where 
+  type PacketArgs 'FromServer 'Connection 'OpenTConnection = HList '[]
+
+
+-- |Destination address, write-only?
+instance PacketC 'ToServer   'Fresh 'OpenTIndividual where 
+  type PacketArgs 'ToServer   'Fresh 'OpenTIndividual = HList '[IndividualAddress, Bool]
+instance PacketC 'FromServer 'Individual 'OpenTIndividual where 
+  type PacketArgs 'FromServer 'Individual 'OpenTIndividual = HList '[]
+
+-- |Destination address, write-only?
+instance PacketC 'ToServer 'Fresh 'OpenTGroup where 
+  type PacketArgs 'ToServer 'Fresh 'OpenTGroup = HList '[GroupAddress, Bool]
+instance PacketC 'FromServer 'Group 'OpenTGroup where 
+  type PacketArgs 'FromServer 'Group 'OpenTGroup = HList '[]
+
+-- |write-only?
+instance PacketC 'ToServer 'Fresh 'OpenTBroadcast where 
+  type PacketArgs 'ToServer 'Fresh 'OpenTBroadcast = HList '[Bool]
+  type WirePacketArgs 'ToServer 'Fresh 'OpenTBroadcast = HList '[Unused Word16, Bool]
+  
+  toWire (KnxPacket _ _ _ args) = convertUnused args
+  fromWire ss sd st = KnxPacket ss sd st . convertUnused
+
+instance PacketC 'FromServer 'Broadcast 'OpenTBroadcast where 
+  type PacketArgs 'FromServer 'Broadcast 'OpenTBroadcast = HList '[]
+
+-- |Source address
+instance PacketC 'ToServer 'Fresh 'OpenTTpdu where 
+  type PacketArgs 'ToServer 'Fresh 'OpenTTpdu = HList '[IndividualAddress]
+  type WirePacketArgs 'ToServer 'Fresh 'OpenTTpdu = HList '[IndividualAddress, Unused Bool]
+
+  toWire (KnxPacket _ _ _ args) = convertUnused args
+  fromWire ss sd st = KnxPacket ss sd st . convertUnused
+
+instance PacketC 'FromServer 'Tpdu 'OpenTTpdu where 
+  type PacketArgs 'FromServer 'Tpdu 'OpenTTpdu = HList '[]
+
+-- |write-only?
+instance PacketC 'ToServer 'Fresh 'OpenGroupcon where 
+  type PacketArgs 'ToServer 'Fresh 'OpenGroupcon = HList '[Bool]
+  type WirePacketArgs 'ToServer 'Fresh 'OpenGroupcon = HList '[Unused Word16, Bool]
+
+  toWire (KnxPacket _ _ _ args) = convertUnused args
+  fromWire ss sd st = KnxPacket ss sd st . convertUnused
+
+instance PacketC 'FromServer 'GroupSocket 'OpenGroupcon where 
+  type PacketArgs 'FromServer 'GroupSocket 'OpenGroupcon = HList '[]
+
+instance PacketC 'ToServer 'Fresh 'McConnection where 
+  type PacketArgs 'ToServer 'Fresh 'McConnection = HList '[]
+instance PacketC 'FromServer 'ManagementConnection 'McConnection where 
+  type PacketArgs 'FromServer 'ManagementConnection 'McConnection = HList '[]
+  
+instance PacketC 'ToServer 'Fresh 'McIndividual where 
+  type PacketArgs 'ToServer 'Fresh 'McIndividual = HList '[IndividualAddress]
+instance PacketC 'FromServer 'ConnectionlessManagementConnection 'McIndividual where 
+  type PacketArgs 'FromServer 'ConnectionlessManagementConnection 'McIndividual = HList '[]
 
 -- |List devices in programming mode
-type instance PacketArgs 'ToServer 'Fresh 'MIndividualAddressRead = HList '[]
-type instance PacketArgs 'FromServer 'Fresh 'MIndividualAddressRead = HList '[[IndividualAddress]]
+instance PacketC 'ToServer 'Fresh 'MIndividualAddressRead where 
+  type PacketArgs 'ToServer 'Fresh 'MIndividualAddressRead = HList '[]
+instance PacketC 'FromServer 'Fresh 'MIndividualAddressRead where 
+  type PacketArgs 'FromServer 'Fresh 'MIndividualAddressRead = HList '[[IndividualAddress]]
 
 -- |Set programming mode of a device
-type instance PacketArgs 'ToServer 'Fresh 'ProgMode = HList '[IndividualAddress, ProgCommand]
--- |Technically, a state is only returned if ProgCommand ProgStatus is sent
--- but I'm not adding another type index.
-type instance PacketArgs 'FromServer 'Fresh 'ProgMode = HList '[Maybe Bool]
+instance PacketC 'ToServer 'Fresh 'ProgMode where 
+  type PacketArgs 'ToServer 'Fresh 'ProgMode = HList '[IndividualAddress, ProgCommand]
+-- |A state is only returned if ProgCommand ProgStatus is sent
+instance PacketC 'FromServer 'Fresh 'ProgMode where 
+  type PacketArgs 'FromServer 'Fresh 'ProgMode = HList '[Maybe Bool]
 
 -- |Write a new address to a device in programming mode.
 -- Requires exactly one device in programming mode.
-type instance PacketArgs 'ToServer 'Fresh 'MIndividualAddressWrite = HList '[IndividualAddress]
-type instance PacketArgs 'FromServer 'Fresh 'MIndividualAddressWrite = HList '[]
+instance PacketC 'ToServer 'Fresh 'MIndividualAddressWrite where 
+  type PacketArgs 'ToServer 'Fresh 'MIndividualAddressWrite = HList '[IndividualAddress]
+instance PacketC 'FromServer 'Fresh 'MIndividualAddressWrite where 
+  type PacketArgs 'FromServer 'Fresh 'MIndividualAddressWrite = HList '[]
 
 -- |Read the mask version of the specified EIB device
-type instance PacketArgs 'ToServer 'Fresh 'MaskVersion = HList '[IndividualAddress]
-type instance PacketArgs 'FromServer 'Fresh 'MaskVersion = HList '[Word16]
+instance PacketC 'ToServer 'Fresh 'MaskVersion where 
+  type PacketArgs 'ToServer 'Fresh 'MaskVersion = HList '[IndividualAddress]
+instance PacketC 'FromServer 'Fresh 'MaskVersion where 
+  type PacketArgs 'FromServer 'Fresh 'MaskVersion = HList '[Word16]
   
 -- this is a whole can of worms. i'll implement it later, if ever
---PacketArgs 'ToServer 'Fresh 'LoadImage = Void
+--'ToServer 'Fresh 'LoadImage = Void
   
 -- |Enable the group cache, if possible.
-type instance PacketArgs d 'Fresh 'CacheEnable = HList '[]
+instance PacketC d 'Fresh 'CacheEnable where 
+  type PacketArgs d 'Fresh 'CacheEnable = HList '[]
 -- |Disable and clear the group cache
-type instance PacketArgs d 'Fresh 'CacheDisable = HList '[]
+instance PacketC d 'Fresh 'CacheDisable where 
+  type PacketArgs d 'Fresh 'CacheDisable = HList '[]
 -- |Clear the group cache entirely
-type instance PacketArgs d 'Fresh 'CacheClear = HList '[]
+instance PacketC d 'Fresh 'CacheClear where 
+  type PacketArgs d 'Fresh 'CacheClear = HList '[]
 -- |Clear the group cache for the specified group address
-type instance PacketArgs 'ToServer 'Fresh 'CacheRemove = HList '[GroupAddress]
+instance PacketC 'ToServer 'Fresh 'CacheRemove where 
+  type PacketArgs 'ToServer 'Fresh 'CacheRemove = HList '[GroupAddress]
 
 -- |Request the last group telegram sent from the specified address
 -- with the specified maximum age.
@@ -101,15 +256,20 @@ type instance PacketArgs 'ToServer 'Fresh 'CacheRemove = HList '[GroupAddress]
 --   and cache the group address as not present
 -- Future calls will only cause a new EIB request if the cache is cleared
 -- for this address or a non-zero age was specified and the entry is older than that
-type instance PacketArgs 'ToServer 'Fresh 'CacheRead = HList '[GroupAddress, Word16]
--- |source, destination, APDU
-type instance PacketArgs 'FromServer 'Fresh 'CacheRead = HList '[GroupAddress, GroupAddress, ByteString]
+instance PacketC 'ToServer 'Fresh 'CacheRead where 
+  type PacketArgs 'ToServer 'Fresh 'CacheRead = HList '[GroupAddress, Word16]
+instance PacketC 'FromServer 'Fresh 'CacheRead where
+  -- |source, destination, APDU
+  type PacketArgs 'FromServer 'Fresh 'CacheRead = HList '[GroupAddress, GroupAddress, ByteString]
   
 -- |Request the last group telegram sent from the specified address
-type instance PacketArgs 'ToServer 'Fresh 'CacheReadNowait = HList '[GroupAddress]
-type instance PacketArgs 'FromServer 'Fresh 'CacheReadNowait = HList '[GroupAddress, GroupAddress, ByteString]
+instance PacketC 'ToServer 'Fresh 'CacheReadNowait where 
+  type PacketArgs 'ToServer 'Fresh 'CacheReadNowait = HList '[GroupAddress]
+instance PacketC 'FromServer 'Fresh 'CacheReadNowait where 
+  type PacketArgs 'FromServer 'Fresh 'CacheReadNowait = HList '[GroupAddress, GroupAddress, ByteString]
   
 -- |TODO. See BCUSDK docs in the meantime.
-type instance PacketArgs 'ToServer 'Fresh 'CacheLastUpdates = HList '[Word16, Word8]
-type instance PacketArgs 'FromServer 'Fresh 'CacheLastUpdates = HList '[Word16, [GroupAddress]]
-
+instance PacketC 'ToServer 'Fresh 'CacheLastUpdates where 
+  type PacketArgs 'ToServer 'Fresh 'CacheLastUpdates = HList '[Word16, Word8]
+instance PacketC 'FromServer 'Fresh 'CacheLastUpdates where 
+  type PacketArgs 'FromServer 'Fresh 'CacheLastUpdates = HList '[Word16, [GroupAddress]]

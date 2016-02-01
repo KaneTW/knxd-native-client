@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, DefaultSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 module KNXd.Client.Internal.Types where
 
 import Data.Bits
@@ -32,12 +32,6 @@ instance Show GroupAddress where
   show (GroupAddress addr) = let (h,m,l) = splitAddress addr
                              in printf "%d/%d/%d" h m l
 
-
-data PacketDirection
-  = FromServer
-  | ToServer
-  deriving (Show, Eq, Typeable)
-
 data ProgCommand
   = ProgOn
   | ProgOff
@@ -45,79 +39,92 @@ data ProgCommand
   | ProgStatus
   deriving (Show, Eq, Typeable, Enum, Bounded)
 
-data ConnectionState
-  = Fresh
-  | Broken
-  | Busmonitor
-  | BusmonitorTs
-  | Broadcast
-  | Group
-  | Individual
-  | Tpdu
-  | Connection
-  | GroupSocket
-  | ManagementConnection
-  | ConnectionlessManagementConnection
-  | Stateless
-  deriving (Show, Eq, Typeable, Enum, Bounded)
+$(singletons [d|
+  data PacketDirection
+      = FromServer
+    | ToServer
+    deriving (Show, Eq, Typeable)
+  
+  data ConnectionState
+    = Fresh
+    | Broken
+    | Busmonitor
+    | BusmonitorTs
+    | Broadcast
+    | Group
+    | Individual
+    | Tpdu
+    | Connection
+    | GroupSocket
+    | ManagementConnection
+    | ConnectionlessManagementConnection
+    deriving (Show, Eq, Typeable)
+  
+  data PacketType
+    = InvalidRequest
+    | ConnectionInuse
+    | ProcessingError
+    | Closed
+    | ResetConnection
+    | OpenBusmonitor
+    | OpenBusmonitorText
+    | OpenVbusmonitor
+    | OpenVbusmonitorText
+    | BusmonitorPacket
+    | BusmonitorPacketTs
+    | OpenBusmonitorTs
+    | OpenVbusmonitorTs
+    | OpenTConnection
+    | OpenTIndividual
+    | OpenTGroup
+    | OpenTBroadcast
+    | OpenTTpdu
+    | ApduPacket
+    | OpenGroupcon
+    | GroupPacket
+    | ProgMode
+    | MaskVersion
+    | MIndividualAddressRead
+    | MIndividualAddressWrite
+    | ErrorAddrExists
+    | ErrorMoreDevice
+    | ErrorTimeout
+    | ErrorVerify
+    | McIndividual
+    | McConnection
+    | McRead
+    | McWrite
+    | McPropRead
+    | McPropWrite
+    | McPeiType
+    | McAdcRead
+    | McAuthorize
+    | McKeyWrite
+    | McMaskVersion
+    | McRestart
+    | McWriteNoverify
+    | McProgMode
+    | McPropDesc
+    | McPropScan
+    | LoadImage
+    | CacheEnable
+    | CacheDisable
+    | CacheClear
+    | CacheRemove
+    | CacheRead
+    | CacheReadNowait
+    | CacheLastUpdates
+    deriving (Show, Eq, Typeable)
+  |])
 
-data PacketType
-  = InvalidRequest
-  | ConnectionInuse
-  | ProcessingError
-  | Closed
-  | ResetConnection
-  | OpenBusmonitor
-  | OpenBusmonitorText
-  | OpenVbusmonitor
-  | OpenVbusmonitorText
-  | BusmonitorPacket
-  | BusmonitorPacketTs
-  | OpenBusmonitorTs
-  | OpenVbusmonitorTs
-  | OpenTConnection
-  | OpenTIndividual
-  | OpenTGroup
-  | OpenTBroadcast
-  | OpenTTpdu
-  | ApduPacket
-  | OpenGroupcon
-  | GroupPacket
-  | ProgMode
-  | MaskVersion
-  | MIndividualAddressRead
-  | MIndividualAddressWrite
-  | ErrorAddrExists
-  | ErrorMoreDevice
-  | ErrorTimeout
-  | ErrorVerify
-  | McIndividual
-  | McConnection
-  | McRead
-  | McWrite
-  | McPropRead
-  | McPropWrite
-  | McPeiType
-  | McAdcRead
-  | McAuthorize
-  | McKeyWrite
-  | McMaskVersion
-  | McRestart
-  | McWriteNoverify
-  | McProgMode
-  | McPropDesc
-  | McPropScan
-  | LoadImage
-  | CacheEnable
-  | CacheDisable
-  | CacheClear
-  | CacheRemove
-  | CacheRead
-  | CacheReadNowait
-  | CacheLastUpdates
-  deriving (Show, Eq, Typeable)
+-- I'm not sure why I have to do this by hand...
+deriving instance Show (Sing (d :: PacketDirection))
+deriving instance Show (Sing (s :: ConnectionState))
+deriving instance Show (Sing (t :: PacketType))
 
-$(genSingletons [''PacketType, ''ConnectionState, ''PacketDirection])
+deriving instance Eq (Sing (d :: PacketDirection))
+deriving instance Eq (Sing (s :: ConnectionState))
+deriving instance Eq (Sing (t :: PacketType))
 
 fromPacketType :: PacketType -> Word16
 fromPacketType InvalidRequest = 0
@@ -229,3 +236,5 @@ toPacketType 116 = CacheRead
 toPacketType 117 = CacheReadNowait
 toPacketType 118 = CacheLastUpdates
 toPacketType _ = error "unknown packet type"
+
+

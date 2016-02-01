@@ -3,8 +3,6 @@ module KNXd.Client.Internal.TH where
 
 import Language.Haskell.TH
 
-import KNXd.Client.Internal.PacketArgs
-
 proofCases :: Q Exp -- ^ PacketDirection scrutinee
            -> Q Exp -- ^ ConnectionState s.
            -> Q Exp -- ^ PacketType s.
@@ -12,7 +10,7 @@ proofCases :: Q Exp -- ^ PacketDirection scrutinee
            -> Q Exp -- ^ wildcard body
            -> Q Exp
 proofCases dExp sExp tExp body wBody = do
-  (FamilyI _ famDecs) <- reify ''PacketArgs
+  (FamilyI _ famDecs) <- reify (mkName "PacketArgs")
   let famEqns = map getEqn famDecs
   
   caseE (tupE [dExp, sExp, tExp]) $ map mkMatch famEqns ++ [wildcardMatch]
