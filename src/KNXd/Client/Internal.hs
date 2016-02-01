@@ -3,6 +3,7 @@ module KNXd.Client.Internal where
 
 import Data.Serialize
 import Data.Singletons
+import Data.Singletons.Decide
 import KNXd.Client.Internal.TH
 import KNXd.Client.Internal.Types
 import KNXd.Client.Internal.PacketArgs
@@ -14,6 +15,18 @@ data WireKnxPacket d s where
   WireKnxPacket :: PacketC d s t => KnxPacket d s t -> WireKnxPacket d s
 
 deriving instance Show (WireKnxPacket d s)
+
+-- Automatic Eq generation doesn't support propositional equality, sadly
+instance Eq (WireKnxPacket d s) where
+  (WireKnxPacket (KnxPacket sd1 ss1 st1 a1)) == (WireKnxPacket (KnxPacket sd2 ss2 st2 a2))
+    = case sd1 %~ sd2 of
+    Proved _ -> case ss1 %~ ss2 of
+      Proved _ -> case st1 %~ st2 of
+        Proved Refl -> a1 == a2
+        _ -> False
+      _ -> False
+    _ -> False
+
 
 getPacketType :: KnxPacket d s t -> PacketType
 getPacketType (KnxPacket _ _ st _) = fromSing st
@@ -34,8 +47,8 @@ instance (SingI d, SingI s) => Serialize (WireKnxPacket d s) where
       putWire $ toWire packet
     
   get = getNested (fromIntegral <$> getWord16be) $ do
-    --todo: instance of Serialize for packetType to avoid error
-    t <- toPacketType <$> getWord16be
+    --todo: make the error a bit prettier
+    Just t <- toPacketType <$> getWord16be
     let sd = sing :: Sing d
     let ss = sing :: Sing s
     case toSing t of
@@ -43,4 +56,4 @@ instance (SingI d, SingI s) => Serialize (WireKnxPacket d s) where
         Just (PacketProof (st' :: Sing t')) -> do
           packet <- fromWire sd ss st' <$> getWire
           return $ WireKnxPacket packet
-        Nothing -> fail "Received a packet I don't have a description for. Internal error."
+        Nothing -> fail "Received a packet I don't have a description for."
