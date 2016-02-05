@@ -135,7 +135,14 @@ instance PacketC 'ToServer 'Fresh 'OpenVbusmonitorTs where
 instance PacketC 'FromServer 'BusmonitorTs 'OpenVbusmonitorTs where 
   type PacketArgs 'FromServer 'BusmonitorTs 'OpenVbusmonitorTs = HList '[Word32]
 
--- i think i can fold these into one PacketType.
+-- |Just the packet data
+instance PacketC 'FromServer 'Busmonitor 'BusmonitorPacket where
+  type PacketArgs 'FromServer 'Busmonitor 'BusmonitorPacket = HList '[ByteString]
+
+-- |Busmonitor status field, timestamp, packet data
+instance PacketC 'FromServer 'Busmonitor 'BusmonitorPacket where
+  type PacketArgs 'FromServer 'Busmonitor 'BusmonitorPacket = HList '[Word8, Word32, ByteString]
+
 -- |Destination address
 instance PacketC 'ToServer 'Fresh 'OpenTConnection where 
   type PacketArgs 'ToServer 'Fresh 'OpenTConnection = HList '[IndividualAddress]
@@ -147,6 +154,10 @@ instance PacketC 'ToServer 'Fresh 'OpenTConnection where
 instance PacketC 'FromServer 'Connection 'OpenTConnection where 
   type PacketArgs 'FromServer 'Connection 'OpenTConnection = HList '[]
 
+instance PacketC 'ToServer 'Connection 'ApduPacket where
+  type PacketArgs 'ToServer 'Connection 'ApduPacket = HList '[APDU]
+instance PacketC 'FromServer 'Connection 'ApduPacket where
+  type PacketArgs 'FromServer 'Connection 'ApduPacket = HList '[APDU]  
 
 -- |Destination address, write-only?
 instance PacketC 'ToServer   'Fresh 'OpenTIndividual where 
@@ -154,11 +165,22 @@ instance PacketC 'ToServer   'Fresh 'OpenTIndividual where
 instance PacketC 'FromServer 'Individual 'OpenTIndividual where 
   type PacketArgs 'FromServer 'Individual 'OpenTIndividual = HList '[]
 
+instance PacketC 'ToServer 'Individual 'ApduPacket where
+  type PacketArgs 'ToServer 'Individual 'ApduPacket = HList '[APDU]
+instance PacketC 'FromServer 'Individual 'ApduPacket where
+  type PacketArgs 'FromServer 'Individual 'ApduPacket = HList '[APDU]  
+
 -- |Destination address, write-only?
 instance PacketC 'ToServer 'Fresh 'OpenTGroup where 
   type PacketArgs 'ToServer 'Fresh 'OpenTGroup = HList '[GroupAddress, Bool]
 instance PacketC 'FromServer 'Group 'OpenTGroup where 
   type PacketArgs 'FromServer 'Group 'OpenTGroup = HList '[]
+
+instance PacketC 'ToServer 'Group 'ApduPacket where
+  type PacketArgs 'ToServer 'Group 'ApduPacket = HList '[APDU]
+instance PacketC 'FromServer 'Group 'ApduPacket where
+  type PacketArgs 'FromServer 'Group 'ApduPacket = HList '[GroupAddress, APDU]
+
 
 -- |write-only?
 instance PacketC 'ToServer 'Fresh 'OpenTBroadcast where 
@@ -171,6 +193,11 @@ instance PacketC 'ToServer 'Fresh 'OpenTBroadcast where
 instance PacketC 'FromServer 'Broadcast 'OpenTBroadcast where 
   type PacketArgs 'FromServer 'Broadcast 'OpenTBroadcast = HList '[]
 
+instance PacketC 'ToServer 'Broadcast 'ApduPacket where
+  type PacketArgs 'ToServer 'Broadcast 'ApduPacket = HList '[APDU]
+instance PacketC 'FromServer 'Broadcast 'ApduPacket where
+  type PacketArgs 'FromServer 'Broadcast 'ApduPacket = HList '[IndividualAddress, APDU]
+
 -- |Source address
 instance PacketC 'ToServer 'Fresh 'OpenTTpdu where 
   type PacketArgs 'ToServer 'Fresh 'OpenTTpdu = HList '[IndividualAddress]
@@ -182,6 +209,12 @@ instance PacketC 'ToServer 'Fresh 'OpenTTpdu where
 instance PacketC 'FromServer 'Tpdu 'OpenTTpdu where 
   type PacketArgs 'FromServer 'Tpdu 'OpenTTpdu = HList '[]
 
+-- |I'm not sure whether a TPDU returns an APDU.
+instance PacketC 'ToServer 'Tpdu 'ApduPacket where
+  type PacketArgs 'ToServer 'Tpdu 'ApduPacket = HList '[IndividualAddress, APDU]
+instance PacketC 'FromServer 'Tpdu 'ApduPacket where
+  type PacketArgs 'FromServer 'Tpdu 'ApduPacket = HList '[IndividualAddress, APDU]
+
 -- |write-only?
 instance PacketC 'ToServer 'Fresh 'OpenGroupcon where 
   type PacketArgs 'ToServer 'Fresh 'OpenGroupcon = HList '[Bool]
@@ -192,6 +225,13 @@ instance PacketC 'ToServer 'Fresh 'OpenGroupcon where
 
 instance PacketC 'FromServer 'GroupSocket 'OpenGroupcon where 
   type PacketArgs 'FromServer 'GroupSocket 'OpenGroupcon = HList '[]
+
+-- |Destination
+instance PacketC 'ToServer 'GroupSocket 'GroupPacket where
+  type PacketArgs 'ToServer 'GroupSocket 'GroupPacket = HList '[GroupAddress, APDU]
+-- |Source, destination
+instance PacketC 'FromServer 'GroupSocket 'GroupPacket where
+  type PacketArgs 'FromServer 'GroupSocket 'GroupPacket = HList '[GroupAddress, GroupAddress, APDU]
 
 instance PacketC 'ToServer 'Fresh 'McConnection where 
   type PacketArgs 'ToServer 'Fresh 'McConnection = HList '[]

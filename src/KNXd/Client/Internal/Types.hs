@@ -2,10 +2,14 @@
 module KNXd.Client.Internal.Types where
 
 import Data.Bits
+import Data.ByteString (ByteString)
 import Data.Typeable
 import Data.Word
 import Data.Singletons.TH
 import Text.Printf
+
+-- |APDUs have structure, too. But we're approximating them as ByteStrings for now.
+type APDU = ByteString
 
 splitAddress :: Word16 -> (Word16, Word16, Word16)
 splitAddress addr = let h = shift addr (-12)
@@ -39,83 +43,99 @@ data ProgCommand
   | ProgStatus
   deriving (Show, Eq, Typeable, Enum, Bounded)
 
-$(singletons [d|
-  data PacketDirection
-      = FromServer
-    | ToServer
-    deriving (Show, Eq, Typeable)
+data PacketDirection
+  = FromServer
+  | ToServer
+  deriving (Show, Eq, Typeable)
   
-  data ConnectionState
-    = Fresh
-    | Broken
-    | Busmonitor
-    | BusmonitorTs
-    | Broadcast
-    | Group
-    | Individual
-    | Tpdu
-    | Connection
-    | GroupSocket
-    | ManagementConnection
-    | ConnectionlessManagementConnection
-    deriving (Show, Eq, Typeable)
-  
-  data PacketType
-    = InvalidRequest
-    | ConnectionInuse
-    | ProcessingError
-    | Closed
-    | ResetConnection
-    | OpenBusmonitor
-    | OpenBusmonitorText
-    | OpenVbusmonitor
-    | OpenVbusmonitorText
-    | BusmonitorPacket
-    | BusmonitorPacketTs
-    | OpenBusmonitorTs
-    | OpenVbusmonitorTs
-    | OpenTConnection
-    | OpenTIndividual
-    | OpenTGroup
-    | OpenTBroadcast
-    | OpenTTpdu
-    | ApduPacket
-    | OpenGroupcon
-    | GroupPacket
-    | ProgMode
-    | MaskVersion
-    | MIndividualAddressRead
-    | MIndividualAddressWrite
-    | ErrorAddrExists
-    | ErrorMoreDevice
-    | ErrorTimeout
-    | ErrorVerify
-    | McIndividual
-    | McConnection
-    | McRead
-    | McWrite
-    | McPropRead
-    | McPropWrite
-    | McPeiType
-    | McAdcRead
-    | McAuthorize
-    | McKeyWrite
-    | McMaskVersion
-    | McRestart
-    | McWriteNoverify
-    | McProgMode
-    | McPropDesc
-    | McPropScan
-    | LoadImage
-    | CacheEnable
-    | CacheDisable
-    | CacheClear
-    | CacheRemove
-    | CacheRead
-    | CacheReadNowait
-    | CacheLastUpdates
-    deriving (Show, Eq, Typeable)
-  |])
+data ConnectionState
+  -- |A fresh connection, or a freshly resetted one.
+  = Fresh
+  -- |When a connection is in this state, consider it unsalvagable and discard it.
+  | Broken
+  -- |Busmonitor mode, either real or virtual. Real prevents sending of frames.
+  | Busmonitor
+  -- |Includes the busmonitor status field and a timestamp.
+  | BusmonitorTs
+  -- |The following are Layer 4 modes
+  | Broadcast
+  -- |Communication using 'GroupAddress' with a specific address
+  | Group
+  -- |Communication using 'IndividualAddress' with a specific address
+  | Individual
+  -- |Raw communication with a given device
+  | Tpdu
+  -- |A proper KNX connection. See BCUSDK docs for details. Take care when using.
+  | Connection
+  -- |Group communication that is not bound to a specific address.
+  -- Can be used to communicate with a whole range of addresses. Read the docs.
+  | GroupSocket
+  -- |Layer 7 management connection.
+  | ManagementConnection
+  -- |'Connection'-less management connection.
+  -- Apparently unused with ETS managed devices.
+  | ConnectionlessManagementConnection
+  deriving (Show, Eq, Typeable)
+
+data PacketType
+  = InvalidRequest
+  | ConnectionInuse
+  | ProcessingError
+  | Closed
+  | ResetConnection
+  | OpenBusmonitor
+  | OpenBusmonitorText
+  | OpenVbusmonitor
+  | OpenVbusmonitorText
+  | BusmonitorPacket
+  | BusmonitorPacketTs
+  | OpenBusmonitorTs
+  | OpenVbusmonitorTs
+  | OpenTConnection
+  | OpenTIndividual
+  | OpenTGroup
+  | OpenTBroadcast
+  | OpenTTpdu
+  | ApduPacket
+  | OpenGroupcon
+  | GroupPacket
+  | ProgMode
+  | MaskVersion
+  | MIndividualAddressRead
+  | MIndividualAddressWrite
+  | ErrorAddrExists
+  | ErrorMoreDevice
+  | ErrorTimeout
+  | ErrorVerify
+  | McIndividual
+  | McConnection
+  | McRead
+  | McWrite
+  | McPropRead
+  | McPropWrite
+  | McPeiType
+  | McAdcRead
+  | McAuthorize
+  | McKeyWrite
+  | McMaskVersion
+  | McRestart
+  | McWriteNoverify
+  | McProgMode
+  | McPropDesc
+  | McPropScan
+  | LoadImage
+  | CacheEnable
+  | CacheDisable
+  | CacheClear
+  | CacheRemove
+  | CacheRead
+  | CacheReadNowait
+  | CacheLastUpdates
+  deriving (Show, Eq, Typeable)
+
+
+$(genSingletons [''PacketDirection, ''ConnectionState, ''PacketType])
+$(singDecideInstances [''PacketType])
 
 -- I'm not sure why I have to do this by hand...
 deriving instance Show (Sing (d :: PacketDirection))
